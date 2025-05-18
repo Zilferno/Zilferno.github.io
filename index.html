@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Album - Auto Thumbnails</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#5D5CDE",
+                    }
+                }
+            },
+            darkMode: 'class'
+        }
+    </script>
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-300">
+    <script>
+        if (localStorage.getItem('darkMode') === 'true' || 
+            (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (!('darkMode' in localStorage)) {
+                if (event.matches) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }
+        });
+    </script>
+
+    <div class="container mx-auto p-4">
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold text-primary mb-2">Video Album</h1>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap gap-2">
+                    <button id="toggleViewedBtn" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-2 rounded transition">
+                        Show All
+                    </button>
+                    <button id="darkModeToggleBtn" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-2 rounded transition">
+                        Toggle Dark Mode
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button id="exportBtn" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-2 rounded transition">
+                        Export Viewed Status
+                    </button>
+                    <label for="importInput" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-4 py-2 rounded transition cursor-pointer">
+                        Import Viewed Status
+                    </label>
+                    <input type="file" id="importInput" accept=".json" class="hidden">
+                </div>
+            </div>
+        </header>
+
+        <main class="flex flex-col md:flex-row gap-6">
+            <aside class="md:w-1/4 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg max-h-[calc(100vh-200px)] overflow-y-auto shadow">
+                <h2 class="text-xl font-bold mb-4 sticky top-0 bg-gray-100 dark:bg-gray-800 py-2 z-10">Folders</h2>
+                <div id="folderList" class="space-y-1">
+                    <p class="text-gray-500 dark:text-gray-400">Loading folders...</p>
+                </div>
+            </aside>
+
+            <section class="md:w-3/4">
+                <div id="currentPathEl" class="mb-4 text-lg font-medium text-gray-700 dark:text-gray-300"></div>
+                <div id="videoGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">Select a folder to view videos.</p>
+                </div>
+
+                <div id="videoModal" class="fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center z-50 hidden animate-fadeIn">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 md:p-6 max-w-4xl w-11/12 max-h-[90vh] flex flex-col animate-scaleUp">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 id="modalVideoTitle" class="text-xl font-bold text-gray-800 dark:text-gray-100 truncate"></h3>
+                            <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="videoPlayerContainer" class="aspect-video bg-black mb-4 rounded overflow-hidden flex-grow">
+                            <video id="videoPlayer" class="w-full h-full" controls controlsList="nodownload"></video>
+                        </div>
+                        <div class="flex flex-col sm:flex-row justify-between items-center gap-2">
+                            <p id="modalVideoPath" class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate"></p>
+                            <div class="space-x-2">
+                                <button id="prevVideoBtn" class="bg-primary hover:bg-purple-700 text-white px-3 py-1 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                                    Previous
+                                </button>
+                                <button id="nextVideoBtn" class="bg-primary hover:bg-purple-700 text-white px-3 py-1 rounded transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <style>
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-scaleUp { animation: scaleUp 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .folder-item.active {
+            background-color: var(--theme-primary, #5D5CDE); 
+            color: white;
+        }
+        .dark .folder-item.active {
+             background-color: var(--theme-primary, #5D5CDE);
+        }
+        .viewed-video-title {
+            color: #5D5CDE; 
+        }
+        .dark .viewed-video-title {
+            color: #8A8AFF; 
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            let library = {
+                folders: [],
+                videos: [],
+                viewedVideos: new Set()
+            };
+
+            const folderListEl = document.getElementById('folderList');
+            const videoGridEl = document.getElementById('videoGrid');
+            const currentPathEl = document.getElementById('currentPathEl');
+            const toggleViewedBtn = document.getElementById('toggleViewedBtn');
+            const darkModeToggleBtn = document.getElementById('darkModeToggleBtn');
+
+            const videoModalEl = document.getElementById('videoModal');
+            const modalVideoTitleEl = document.getElementById('modalVideoTitle');
+            const modalVideoPathEl = document.getElementById('modalVideoPath');
+            const videoPlayerEl = document.getElementById('videoPlayer');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const prevVideoBtn = document.getElementById('prevVideoBtn');
+            const nextVideoBtn = document.getElementById('nextVideoBtn');
+
+            const exportBtn = document.getElementById('exportBtn');
+            const importInput = document.getElementById('importInput');
+
+            let currentFolderId = null;
+            let filterState = 'all';
+            let currentVideoIndexInFilteredList = -1;
+            let currentFilteredVideoList = [];
+            
+            const placeholderThumbnail = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+
+            // --- UTILITY FUNCTIONS ---
+            function getFolder(id) {
+                return library.folders.find(folder => folder.id === id);
+            }
+
+            function getFolderPathRecursive(folderId, pathArray = []) {
+                const folder = getFolder(folderId);
+                if (!folder) return 'Unknown Path';
+                pathArray.unshift(folder.name);
+                if (folder.parent && getFolder(folder.parent)) {
+                    return getFolderPathRecursive(folder.parent, pathArray);
+                }
+                return pathArray.join(' > ');
+            }
+            
+            function getChildFolders(parentId) {
+                return library.folders.filter(folder => folder.parent === parentId);
+            }
+
+            function getFolderVideos(folderId) {
+                return library.videos.filter(video => video.folder === folderId);
+            }
+
+            // --- THUMBNAIL GENERATION FROM URL ---
+            function generateThumbnailFromUrl(videoUrl) {
+                return new Promise((resolve) => {
+                    const video = document.createElement('video');
+                    video.crossOrigin = "anonymous"; // Penting untuk CORS jika video dari domain lain
+                    video.preload = 'metadata';
+                    
+                    video.onloadedmetadata = function() {
+                        // Ambil frame setelah 1 detik, atau sesuaikan
+                        video.currentTime = 1; 
+                    };
+                    
+                    video.onseeked = function() {
+                        const canvas = document.createElement('canvas');
+                        // Tentukan ukuran thumbnail, misal lebar 320px, tinggi disesuaikan aspek rasio
+                        const targetWidth = 320; 
+                        const scaleFactor = targetWidth / video.videoWidth;
+                        canvas.width = targetWidth;
+                        canvas.height = video.videoHeight * scaleFactor;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7); // Kualitas 0.7
+                        resolve(thumbnailDataUrl);
+                        // Tidak perlu URL.revokeObjectURL(video.src) karena src adalah URL langsung
+                    };
+
+                    video.onerror = function(e) {
+                        console.error('Error loading video for thumbnail generation from URL:', videoUrl, e);
+                        resolve(placeholderThumbnail); // Kembalikan placeholder jika error
+                    };
+                    
+                    video.src = videoUrl;
+                });
+            }
+
+            // --- DATA LOADING AND PROCESSING ---
+            async function processVideoThumbnails() {
+                const thumbnailPromises = library.videos.map(async (video, index) => {
+                    // Hanya buat thumbnail jika belum ada dan ada URL video
+                    if (!video.thumbnail && video.url) { 
+                        console.log(`Generating thumbnail for: ${video.title}`);
+                        try {
+                            const thumbnailUrl = await generateThumbnailFromUrl(video.url);
+                            library.videos[index].thumbnail = thumbnailUrl;
+                        } catch (error) {
+                            console.error(`Failed to generate thumbnail for ${video.title}:`, error);
+                            library.videos[index].thumbnail = placeholderThumbnail;
+                        }
+                    } else if (!video.thumbnail) {
+                        // Jika tidak ada URL atau thumbnail, set placeholder
+                         library.videos[index].thumbnail = placeholderThumbnail;
+                    }
+                });
+                await Promise.all(thumbnailPromises);
+                console.log("Thumbnail processing complete.");
+            }
+
+            async function loadLibraryData() {
+                try {
+                    const response = await fetch('video_data3.json?t=' + new Date().getTime());
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}. Failed to load 'video_data2.json'.`);
+                    }
+                    const data = await response.json();
+                    library.folders = data.folders || [];
+                    library.videos = data.videos || [];
+                    
+                    // Proses thumbnail setelah data video dimuat
+                    await processVideoThumbnails(); 
+
+                    const rootFolderFromJson = library.folders.find(f => !f.parent) || library.folders[0];
+                    currentFolderId = rootFolderFromJson ? rootFolderFromJson.id : null;
+                    
+                    loadViewedStatus();
+                } catch (error) {
+                    console.error('Error loading library data:', error);
+                    folderListEl.innerHTML = `<p class="text-red-500 dark:text-red-400 p-2">${error.message}</p>`;
+                    videoGridEl.innerHTML = `<p class="col-span-full text-center py-8 text-red-500 dark:text-red-400">Error loading video library. Please ensure 'video_data2.json' is present and correctly formatted.</p>`;
+                }
+            }
+
+            function loadViewedStatus() {
+                const viewedData = localStorage.getItem('viewedVideos');
+                if (viewedData) {
+                    try {
+                        library.viewedVideos = new Set(JSON.parse(viewedData));
+                    } catch (e) {
+                        console.error("Error parsing viewed status from localStorage", e);
+                        library.viewedVideos = new Set();
+                    }
+                }
+            }
+
+            function saveViewedStatus() {
+                localStorage.setItem('viewedVideos', JSON.stringify(Array.from(library.viewedVideos)));
+            }
+
+            // --- UI RENDERING FUNCTIONS ---
+            function renderFolders() {
+                folderListEl.innerHTML = '';
+                if (library.folders.length === 0) {
+                    folderListEl.innerHTML = '<p class="text-gray-500 dark:text-gray-400 p-2">No folders found.</p>';
+                    return;
+                }
+                const rootFolders = library.folders.filter(f => !f.parent);
+                (rootFolders.length > 0 ? rootFolders : library.folders).forEach(folder => renderFolderItem(folder, 0));
+            }
+
+            function renderFolderItem(folder, level) {
+                const folderItem = document.createElement('div');
+                folderItem.className = `folder-item cursor-pointer p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors duration-150 text-sm ${folder.id === currentFolderId ? 'active' : ''}`;
+                folderItem.style.paddingLeft = `${0.5 + level * 1}rem`;
+
+                folderItem.innerHTML = `
+                    <div class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        <span class="truncate">${folder.name}</span>
+                    </div>`;
+                folderItem.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    navigateToFolder(folder.id);
+                });
+                folderListEl.appendChild(folderItem);
+
+                getChildFolders(folder.id).forEach(child => renderFolderItem(child, level + 1));
+            }
+
+            function renderVideos() {
+                videoGridEl.innerHTML = '';
+                if (!currentFolderId && library.folders.length > 0) {
+                     videoGridEl.innerHTML = `<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">Select a folder to display videos.</p>`;
+                     return;
+                }
+                if (!currentFolderId && library.folders.length === 0) {
+                     videoGridEl.innerHTML = `<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">No folders or videos available.</p>`;
+                     return;
+                }
+
+                const videosInCurrentFolder = getFolderVideos(currentFolderId);
+                currentFilteredVideoList = videosInCurrentFolder.filter(video => {
+                    if (filterState === 'viewed') return library.viewedVideos.has(video.id);
+                    if (filterState === 'unviewed') return !library.viewedVideos.has(video.id);
+                    return true;
+                });
+
+                if (currentFilteredVideoList.length === 0) {
+                    videoGridEl.innerHTML = `<p class="col-span-full py-8 text-center text-gray-500 dark:text-gray-400">No videos found matching the filter in this folder.</p>`;
+                    return;
+                }
+
+                currentFilteredVideoList.forEach((video, index) => {
+                    const isViewed = library.viewedVideos.has(video.id);
+                    const videoItem = document.createElement('div');
+                    videoItem.className = 'video-item bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-all duration-200 transform hover:scale-105 hover:shadow-xl cursor-pointer flex flex-col';
+                    
+                    const titleColorClass = isViewed ? 'viewed-video-title' : 'text-gray-800 dark:text-gray-100';
+                    const effectiveThumbnail = video.thumbnail || placeholderThumbnail;
+
+                    videoItem.innerHTML = `
+                        <div class="aspect-video bg-gray-300 dark:bg-gray-700 relative">
+                            <img src="${effectiveThumbnail}" alt="${video.title}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='${placeholderThumbnail}';">
+                            <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 opacity-0 hover:opacity-100 transition-opacity duration-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            ${isViewed ? '<div class="absolute top-2 right-2 bg-primary text-white text-xs px-2 py-1 rounded-full shadow">Viewed</div>' : ''}
+                        </div>
+                        <div class="p-3 flex-grow flex flex-col justify-between">
+                             <h3 class="font-semibold text-sm ${titleColorClass} mb-1 line-clamp-2">${video.title}</h3>
+                            ${video.dateAdded ? `<p class="text-xs text-gray-500 dark:text-gray-400 mt-auto">${new Date(video.dateAdded).toLocaleDateString()}</p>` : ''}
+                        </div>`;
+                    videoItem.addEventListener('click', () => openVideoModal(video, index));
+                    videoGridEl.appendChild(videoItem);
+                });
+            }
+
+            function updatePathDisplay() {
+                currentPathEl.textContent = currentFolderId ? getFolderPathRecursive(currentFolderId) : (library.folders.length > 0 ? "Select a folder" : "No folders loaded");
+            }
+
+            // --- NAVIGATION AND MODALS ---
+            function navigateToFolder(folderId) {
+                currentFolderId = folderId;
+                updatePathDisplay();
+                renderFolders(); // Pastikan folder dirender ulang untuk menandai folder aktif
+                renderVideos();
+            }
+
+            function openVideoModal(video, indexInFiltered) {
+                currentVideoIndexInFilteredList = indexInFiltered;
+                modalVideoTitleEl.textContent = video.title;
+                modalVideoPathEl.textContent = getFolderPathRecursive(video.folder);
+                videoPlayerEl.src = video.url;
+                videoModalEl.classList.remove('hidden');
+                
+                if (!library.viewedVideos.has(video.id)) {
+                    library.viewedVideos.add(video.id);
+                    saveViewedStatus();
+                    renderVideos(); // Render ulang grid untuk update status 'viewed'
+                }
+                
+                updateNavButtonsInModal();
+                videoPlayerEl.play().catch(e => console.warn("Autoplay may be blocked by browser:", e));
+            }
+
+            function updateNavButtonsInModal() {
+                prevVideoBtn.disabled = currentVideoIndexInFilteredList <= 0;
+                nextVideoBtn.disabled = currentVideoIndexInFilteredList >= currentFilteredVideoList.length - 1;
+            }
+
+            function closeVideoModal() {
+                videoModalEl.classList.add('hidden');
+                videoPlayerEl.pause();
+                videoPlayerEl.removeAttribute('src'); 
+                videoPlayerEl.load(); 
+            }
+
+            // --- IMPORT/EXPORT & FILTERS ---
+            function exportViewedStatus() {
+                const dataStr = JSON.stringify({ viewedVideoIds: Array.from(library.viewedVideos) }, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'viewed_status.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            
+            function importViewedStatus(file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.viewedVideoIds && Array.isArray(data.viewedVideoIds)) {
+                            library.viewedVideos = new Set(data.viewedVideoIds);
+                            saveViewedStatus();
+                            renderVideos();
+                            alert('Viewed status imported successfully!');
+                        } else {
+                            alert('Invalid file format. Expected "viewedVideoIds" array.');
+                        }
+                    } catch (e) {
+                        alert('Error importing file: ' + e.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+            
+            function toggleViewedFilter() {
+                const states = ['all', 'unviewed', 'viewed'];
+                const currentIdx = states.indexOf(filterState);
+                filterState = states[(currentIdx + 1) % states.length];
+                toggleViewedBtn.textContent = `Show ${filterState.charAt(0).toUpperCase() + filterState.slice(1)}`;
+                renderVideos();
+            }
+
+            function toggleSystemDarkMode() {
+                const isDark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('darkMode', isDark);
+                renderVideos(); 
+            }
+
+            // --- EVENT LISTENERS ---
+            toggleViewedBtn.addEventListener('click', toggleViewedFilter);
+            darkModeToggleBtn.addEventListener('click', toggleSystemDarkMode);
+            closeModalBtn.addEventListener('click', closeVideoModal);
+            
+            prevVideoBtn.addEventListener('click', () => {
+                if (currentVideoIndexInFilteredList > 0) {
+                    openVideoModal(currentFilteredVideoList[--currentVideoIndexInFilteredList], currentVideoIndexInFilteredList);
+                }
+            });
+            
+            nextVideoBtn.addEventListener('click', () => {
+                if (currentVideoIndexInFilteredList < currentFilteredVideoList.length - 1) {
+                    openVideoModal(currentFilteredVideoList[++currentVideoIndexInFilteredList], currentVideoIndexInFilteredList);
+                }
+            });
+
+            videoPlayerEl.addEventListener('ended', () => {
+                if (!nextVideoBtn.disabled && !videoModalEl.classList.contains('hidden')) {
+                    nextVideoBtn.click();
+                }
+            });
+            
+            exportBtn.addEventListener('click', exportViewedStatus);
+            importInput.addEventListener('change', (e) => {
+                if (e.target.files.length) importViewedStatus(e.target.files[0]);
+                e.target.value = null;
+            });
+            
+            window.addEventListener('click', (e) => e.target === videoModalEl && closeVideoModal());
+            window.addEventListener('keydown', (e) => e.key === 'Escape' && !videoModalEl.classList.contains('hidden') && closeVideoModal());
+
+            // --- INITIALIZATION ---
+            async function initializeApp() {
+                await loadLibraryData(); // Ini sekarang juga memproses thumbnail
+                renderFolders();
+                updatePathDisplay(); 
+                if (currentFolderId) {
+                     renderVideos();
+                } else if (library.folders.length > 0) { 
+                     videoGridEl.innerHTML = `<p class="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">Select a folder to display videos.</p>`;
+                }
+            }
+
+            initializeApp();
+        });
+    </script>
+</body>
+</html>
